@@ -1,80 +1,74 @@
-import React, { useEffect, useRef } from 'react';
-import './KakaoMap.css';
+import React, { useEffect } from 'react';
 
-const KakaoMap = ({ hospitals, userLocation }) => {
-  const mapContainer = useRef(null);
-  const mapInstance = useRef(null);
-
+const KakaoMap = ({ recommendedHospitals = [], keyword, mapRef, userLocation }) => {
   useEffect(() => {
-    if (!mapContainer.current || hospitals.length === 0) return;
+    const loadMap = () => {
+      const kakao = window.kakao;
+      const container = document.getElementById('map');
+      if (!container) return;
 
-    const { kakao } = window;
-    
-    const mapOption = {
-      center: new kakao.maps.LatLng(userLocation.lat, userLocation.lng),
-      level: 5
+      //userLocation가 없으면 fallback (서울)
+      let centerPos;
+      if (
+        userLocation &&
+        typeof userLocation.lat === "number" &&
+        typeof userLocation.lng === "number"
+      ) {
+        centerPos = new kakao.maps.LatLng(userLocation.lat, userLocation.lng);
+      } else {
+        console.warn("⛔ userLocation이 없으므로 서울 기본 좌표로 대체");
+        centerPos = new kakao.maps.LatLng(37.5665, 126.9780); // 서울시청
+      }
+
+      const map = new kakao.maps.Map(container, {
+        center: centerPos,
+        level: 3,
+      });
+      mapRef.current = map;
+
+      // 내 위치 마커 (있을 때만)
+      if (
+        userLocation &&
+        typeof userLocation.lat === "number" &&
+        typeof userLocation.lng === "number"
+      ) {
+        new kakao.maps.Marker({
+          position: centerPos,
+          map,
+          title: '내 위치',
+        });
+      }
+
+      // 추천 병원 마커
+      if (recommendedHospitals.length > 0) {
+        recommendedHospitals.forEach((h) => {
+          if (typeof h.y === "number" && typeof h.x === "number") {
+            new kakao.maps.Marker({
+              map,
+              position: new kakao.maps.LatLng(h.y, h.x),
+              title: h.placeName,
+            });
+          }
+        });
+      }
     };
 
-    const map = new kakao.maps.Map(mapContainer.current, mapOption);
-    mapInstance.current = map;
-
-    // 현재 위치 마커
-    const userMarker = new kakao.maps.Marker({
-      position: new kakao.maps.LatLng(userLocation.lat, userLocation.lng),
-      map: map
-    });
-
-    const userInfowindow = new kakao.maps.InfoWindow({
-      content: '<div style="padding:5px;font-size:12px;font-weight:bold;">현재 위치</div>'
-    });
-    userInfowindow.open(map, userMarker);
-
-    // 병원 마커들
-    hospitals.forEach((hospital, index) => {
-      const markerPosition = new kakao.maps.LatLng(hospital.y, hospital.x);
-      
-      const marker = new kakao.maps.Marker({
-        position: markerPosition,
-        map: map
-      });
-
-      const infowindow = new kakao.maps.InfoWindow({
-        content: `
-          <div style="padding:8px;min-width:200px;">
-            <strong>${index + 1}. ${hospital.placeName}</strong>
-            <br/>
-            <small>${hospital.addressName}</small>
-          </div>
-        `
-      });
-
-      kakao.maps.event.addListener(marker, 'click', function() {
-        infowindow.open(map, marker);
-      });
-
-      // 첫 번째 병원은 기본으로 정보창 열기
-      if (index === 0) {
-        infowindow.open(map, marker);
-      }
-    });
-
-    // 지도 범위 재설정
-    const bounds = new kakao.maps.LatLngBounds();
-    bounds.extend(new kakao.maps.LatLng(userLocation.lat, userLocation.lng));
-    
-    hospitals.forEach(hospital => {
-      bounds.extend(new kakao.maps.LatLng(hospital.y, hospital.x));
-    });
-    
-    map.setBounds(bounds);
-
-  }, [hospitals, userLocation]);
+    if (!window.kakao || !window.kakao.maps) {
+      const script = document.createElement('script');
+      script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.REACT_APP_KAKAO_MAP_KEY}&autoload=false&libraries=services`;
+      script.async = true;
+      script.onload = () => window.kakao.maps.load(loadMap);
+      document.head.appendChild(script);
+    } else {
+      window.kakao.maps.load(loadMap);
+    }
+  }, [recommendedHospitals, keyword, userLocation]);
 
   return (
-    <div className="map-container">
-      <h2>📍 병원 위치</h2>
-      <div ref={mapContainer} className="kakao-map"></div>
-    </div>
+    <div
+      id="map"
+      style={{ width: '100%', height: '400px', marginTop: '20px' }}
+    />
   );
 };
 
